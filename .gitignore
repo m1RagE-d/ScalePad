@@ -1,0 +1,16 @@
+# Local HTTPS certificate material
+certs/*.crt
+certs/*.key
+certs/*.cnf
+
+# Generated Python files
+__pycache__/
+*.py[cod]
+
+# Inspection and intermediate image exports
+assets/inspect/
+assets/p1/
+assets/p6a/
+assets/render-check/
+assets/faces-a/
+assets/faces-b/
