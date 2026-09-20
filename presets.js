@@ -497,22 +497,6 @@ const vviq = buildScale('VVIQ 视觉想象生动性测试',
     '请想象：湖的颜色和外观。', '请想象：一阵风吹动树叶，湖面泛起涟漪。'
   ]);
 
-const sesOptions = ['很不符合', '不符合', '符合', '非常符合'];
-const ses = buildScale('SES 自尊量表',
-  '请根据您平时的真实感受，选择每句话与您的符合程度。答案没有对错之分。',
-  sesOptions, [1, 2, 3, 4], [
-    '我认为自己是一个有价值的人，至少与别人不相上下。',
-    '我觉得我有许多优点。',
-    '*总的来说，我倾向于认为自己是一个失败者。',
-    '我做事可以做得和大多数人一样好。',
-    '*我觉得自己没有什么值得自豪的地方。',
-    '我对自己持有一种肯定的态度。',
-    '整体而言，我对自己感到满意。',
-    '*我希望我能为自己赢得更多尊重。',
-    '*我确实时常感到自己毫无用处。',
-    '*我时常认为自己一无是处。'
-  ]);
-
 const pitOptions = ['根本没有图像', '模糊', '模糊但可以识别', '生动', '非常生动'];
 const pitIntroPast = '请读完每句话后闭上眼睛，尽力回想相应的人、物或场景，在脑海中形成完整画面后睁开眼睛，按 1–5 分评价画面的生动程度。';
 const pitIntroFuture = '请读完每句话后闭上眼睛，想象未来发生在你身上的情景，在脑海中形成完整画面后睁开眼睛，按 1–5 分评价画面的生动程度。';
@@ -560,7 +544,6 @@ window.scalePadPresets = [
   { name: 'BIP A｜视觉感知', questions: perceptionA.flatMap(buildSection) },
   { name: 'BIP B｜视觉感知', questions: perceptionB.flatMap(buildSection) },
   { name: 'VVIQ｜视觉想象生动性', questions: vviq },
-  { name: 'SES｜自尊量表', questions: ses },
   { name: 'PIT｜前瞻意象任务', questions: pit },
   { name: 'BAI｜贝克焦虑量表', questions: bai },
   { name: 'SDS｜抑郁自评量表', questions: sds }

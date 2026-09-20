@@ -2,11 +2,16 @@ const defaultPresets = window.scalePadPresets || [];
 
 const presetStorageKey = 'scalepad_presets_v3';
 const voiceStorageKey = 'scalepad_voice_v1';
+const planStorageKey = 'scalepad_plan_v1';
+const voiceNameKey = 'scalepad_voice_name_v1';
+const buildTag = '2026-09-21d';
 let presets = loadPresets();
 
-let presetIndex = 0;
 let questionIndex = 0;
 let activeQuestions = [];
+let plan = loadPlan();
+let activePlan = [];
+let voiceName = localStorage.getItem(voiceNameKey) || '';
 let ageBand = '';
 let epilepsy = '';
 let voiceEnabled = localStorage.getItem(voiceStorageKey) !== 'off';
@@ -38,6 +43,12 @@ const eventWritePromises = new Set();
 const logDbName = 'scalepad_live_logs_v1';
 const logDbVersion = 1;
 const $ = (id) => document.getElementById(id);
+
+function planLabel() {
+  if (!activePlan.length) return '未选择';
+  const names = [...new Set(activePlan.map((step) => step.preset))];
+  return names.length === 1 ? names[0] : `${names[0]} 等 ${names.length} 份问卷`;
+}
 
 function safeFilePart(value) {
   return String(value || 'session').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 80) || 'session';
@@ -96,6 +107,13 @@ function idbGetSessionEvents(id) {
     request.onsuccess = () => resolve((request.result || []).sort((a, b) => a.sequence - b.sequence));
     request.onerror = () => reject(request.error || new Error('无法读取答题记录'));
   });
+}
+
+function setQuizStatus(message) {
+  const line = $('quizStatus');
+  if (!line) return;
+  line.textContent = message;
+  line.classList.toggle('hidden', !message);
 }
 
 function setStorageStatus(message, state = '') {
@@ -262,12 +280,12 @@ function sectionStats() {
   const order = [];
   const groups = new Map();
   activeQuestions.forEach((question, index) => {
-    const name = question.section || '未分区';
-    if (!groups.has(name)) {
-      groups.set(name, { name, scoring: question.scoring || 'auto', total: 0, answered: 0, correct: 0, score: 0, maxScore: 0 });
-      order.push(name);
+    const key = question.planIndex ?? (question.section || '未分区');
+    if (!groups.has(key)) {
+      groups.set(key, { name: question.section || '未分区', source: question.planPreset || '', scoring: question.scoring || 'auto', total: 0, answered: 0, correct: 0, score: 0, maxScore: 0 });
+      order.push(key);
     }
-    const group = groups.get(name);
+    const group = groups.get(key);
     group.total += 1;
     if (group.scoring === 'scale' && Array.isArray(question.values)) group.maxScore += Math.max(...question.values);
     const record = answerByQuestion[index];
@@ -276,7 +294,7 @@ function sectionStats() {
     if (group.scoring === 'scale') group.score += scaleScore(question, record.answer);
     else if (group.scoring === 'auto' && isCorrect(question, record.answer)) group.correct += 1;
   });
-  return order.map((name) => groups.get(name));
+  return order.map((key) => groups.get(key));
 }
 
 function beginQuestionTelemetry(question) {
@@ -353,25 +371,144 @@ function savePresets() {
   localStorage.setItem(presetStorageKey, JSON.stringify(presets));
 }
 
-function refreshPresetSelect() {
-  $('preset').innerHTML = '';
-  presets.forEach((preset, index) => $('preset').add(new Option(preset.name, index)));
+function loadPlan() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(planStorageKey));
+    if (Array.isArray(saved)) return saved.filter((name) => typeof name === 'string');
+  } catch (error) {
+    console.warn('无法读取上次选择的量表。', error);
+  }
+  return [];
 }
 
-refreshPresetSelect();
+function savePlan() {
+  localStorage.setItem(planStorageKey, JSON.stringify(plan));
+}
+
+/* 30 岁以下用 18–30 岁版名人题，其余用 31–60 岁版 */
+function resolveAgeBand() {
+  const age = $('patientAge').value.trim();
+  if (!/^\d+$/.test(age)) return '';
+  return Number(age) < 31 ? 'young' : 'older';
+}
+
+function planPresets() {
+  return plan.map((name) => presets.find((preset) => preset.name === name)).filter(Boolean);
+}
+
+function countQuestions(preset, band) {
+  return preset.questions.filter((question) => !question.ageBand || question.ageBand === band).length;
+}
+
+function renderScaleList() {
+  const band = resolveAgeBand();
+  const list = $('scaleList');
+  list.innerHTML = '';
+  presets.forEach((preset) => {
+    const order = plan.indexOf(preset.name);
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = `scale-item${order >= 0 ? ' on' : ''}`;
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = order >= 0 ? String(order + 1) : '';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = preset.name;
+    const count = document.createElement('span');
+    count.className = 'count';
+    count.textContent = `${countQuestions(preset, band || 'older')} 题`;
+    item.append(badge, name, count);
+    item.onclick = () => {
+      if (order >= 0) plan.splice(order, 1);
+      else plan.push(preset.name);
+      savePlan();
+      renderScaleList();
+    };
+    list.append(item);
+  });
+
+  const total = planPresets().reduce((sum, preset) => sum + countQuestions(preset, band || 'older'), 0);
+  $('start').textContent = plan.length ? `开始（${plan.length} 份 · ${total} 题）` : '开始';
+  $('ageBandNote').textContent = band ? `名人题用 ${band === 'young' ? '18–30' : '31–60'} 岁版` : '填写年龄后自动选择名人题版本';
+  $('epilepsyNo').classList.toggle('selected', epilepsy === 'no');
+  $('epilepsyYes').classList.toggle('selected', epilepsy === 'yes');
+}
+
+$('epilepsyNo').onclick = () => { epilepsy = 'no'; renderScaleList(); };
+$('epilepsyYes').onclick = () => {
+  epilepsy = window.confirm('受试者有癫痫病史。本测试包含图片与画面切换材料，确认仍要继续吗？') ? 'yes' : '';
+  renderScaleList();
+};
+
 updateHomeButton();
 renderVoiceToggle();
+renderScaleList();
+$('buildTag').textContent = `版本 ${buildTag}`;
+$('patientAge').oninput = renderScaleList;
 
 $('chooseSaveFolder').onclick = chooseSaveFolder;
 $('homeButton').onclick = goHome;
 $('prevQuestion').onclick = () => navigateTo(questionIndex - 1);
 $('nextQuestion').onclick = () => navigateTo(questionIndex + 1);
 $('speakQuestion').onclick = toggleSpeech;
+$('skipSection').onclick = () => { void skipSection(); };
+
+function chineseVoices() {
+  if (!('speechSynthesis' in window) || !window.speechSynthesis.getVoices) return [];
+  return window.speechSynthesis.getVoices().filter((voice) => /^zh/i.test(voice.lang || ''));
+}
+
+/* 系统默认常是 compact 压缩音，听起来很机械；优先挑 Siri / 非压缩的普通话声音 */
+function rankVoice(voice) {
+  const name = (voice.name || '').toLowerCase();
+  let score = 0;
+  if (/siri/.test(name)) score += 8;
+  if (/premium|enhanced|优质|增强/.test(name)) score += 6;
+  if (/compact|压缩/.test(name)) score -= 6;
+  if (/^zh-cn/i.test(voice.lang || '')) score += 3;
+  if (!voice.localService) score += 1;
+  return score;
+}
+
+function pickVoice() {
+  const voices = chineseVoices();
+  if (!voices.length) return null;
+  return voices.find((voice) => voice.name === voiceName)
+    || [...voices].sort((a, b) => rankVoice(b) - rankVoice(a))[0];
+}
+
+function renderVoiceOptions() {
+  const select = $('voiceSelect');
+  const voices = chineseVoices();
+  select.innerHTML = '';
+  if (!voices.length) {
+    select.add(new Option('系统未提供中文语音', ''));
+    $('voiceHint').textContent = '没有检测到中文语音，请在系统设置里添加。';
+    return;
+  }
+  const best = pickVoice();
+  [...voices].sort((a, b) => rankVoice(b) - rankVoice(a)).forEach((voice) => {
+    select.add(new Option(`${voice.name}（${voice.lang}）`, voice.name));
+  });
+  select.value = best ? best.name : '';
+  $('voiceHint').textContent = 'iPad 上可在 设置 → 辅助功能 → 朗读内容 → 声音 → 中文 里下载“增强/优质”音色，比默认音自然很多。';
+}
 
 function renderVoiceToggle() {
   const button = $('voiceToggle');
   button.textContent = voiceEnabled ? '已开启' : '已关闭';
   button.classList.toggle('selected', voiceEnabled);
+}
+
+$('voiceSelect').onchange = () => {
+  voiceName = $('voiceSelect').value;
+  localStorage.setItem(voiceNameKey, voiceName);
+};
+
+if ('speechSynthesis' in window) {
+  renderVoiceOptions();
+  window.speechSynthesis.onvoiceschanged = renderVoiceOptions;
 }
 
 $('voiceToggle').onclick = () => {
@@ -402,14 +539,6 @@ async function chooseSaveFolder() {
   }
 }
 
-/* 年龄 <31 用 18–30 岁版本，其余用 31–60 岁版本；也可在开始前手动指定 */
-function resolveAgeBand() {
-  const choice = $('ageBand').value;
-  if (choice) return choice;
-  if (!patientAge) return '';
-  return Number(patientAge) < 31 ? 'young' : 'older';
-}
-
 async function startSession() {
   if (isStarting) return;
   isStarting = true;
@@ -422,27 +551,40 @@ async function startSession() {
     unlock();
     return;
   }
-  epilepsy = $('epilepsy').value;
   if (!epilepsy) {
-    window.alert('请先完成癫痫病史确认，再开始测试。');
+    window.alert('请先确认受试者有无癫痫病史。');
     unlock();
     return;
   }
-  if (epilepsy === 'yes' && !window.confirm('受试者有癫痫病史。本测试包含图片与画面切换材料，是否仍要继续？')) {
+  if (!plan.length) {
+    window.alert('请先选择至少一份量表。');
     unlock();
     return;
   }
   ageBand = resolveAgeBand();
-  presetIndex = Number($('preset').value);
-  const questions = presets[presetIndex].questions;
-  if (!ageBand && questions.some((question) => question.ageBand)) {
-    window.alert('该问卷的名人题分 18–30 岁与 31–60 岁两个版本，请填写年龄或手动选择版本。');
+  const chosen = planPresets();
+  if (!ageBand && chosen.some((preset) => preset.questions.some((question) => question.ageBand))) {
+    window.alert('所选量表含分年龄版本的名人题，请先填写年龄。');
     unlock();
     return;
   }
-  activeQuestions = questions.filter((question) => !question.ageBand || question.ageBand === ageBand);
+  /* 选中顺序 = 作答顺序；板块（planIndex）用于分区统计和“跳过本部分” */
+  activePlan = [];
+  activeQuestions = [];
+  chosen.forEach((preset) => {
+    preset.questions
+      .filter((question) => !question.ageBand || question.ageBand === ageBand)
+      .forEach((question) => {
+        const last = activePlan[activePlan.length - 1];
+        if (!last || last.preset !== preset.name || last.section !== question.section) {
+          activePlan.push({ preset: preset.name, section: question.section, count: 0 });
+        }
+        activePlan[activePlan.length - 1].count += 1;
+        activeQuestions.push({ ...question, planIndex: activePlan.length - 1, planPreset: preset.name });
+      });
+  });
   if (!activeQuestions.length) {
-    window.alert('该问卷没有可用题目。');
+    window.alert('所选量表没有可作答的题目。');
     unlock();
     return;
   }
@@ -460,14 +602,15 @@ async function startSession() {
       id: sessionId,
       patient,
       age: patientAge || null,
-      preset: presets[presetIndex].name,
+      preset: planLabel(),
+      plan: activePlan,
       ageBand,
       epilepsy,
       questionCount: activeQuestions.length,
       startedAt: new Date(sessionStartedAt).toISOString(),
       status: 'active'
     });
-    if (!(await writeEvent({ type: 'session_started', patient, age: patientAge || null, preset: presets[presetIndex].name, ageBand, epilepsy, questionCount: activeQuestions.length }))) throw new Error('无法写入测试开始记录');
+    if (!(await writeEvent({ type: 'session_started', patient, age: patientAge || null, preset: planLabel(), ageBand, epilepsy, questionCount: activeQuestions.length }))) throw new Error('无法写入测试开始记录');
   } catch (error) {
     reportStorageFailure(error, '测试开始记录');
     unlock();
@@ -497,7 +640,7 @@ $('backToSetup').onclick = () => {
   $('editor').classList.add('hidden');
   $('setup').classList.remove('hidden');
   updateHomeButton();
-  refreshPresetSelect();
+  renderScaleList();
 };
 
 $('presetFilter').oninput = renderPresetList;
@@ -664,7 +807,9 @@ function renderQuestion() {
   beginQuestionTelemetry(question);
   if (sessionId && storageReady) void writeEvent({ type: 'question_presented', ...questionFields(question), presentedAt: currentQuestionTelemetry.presentedAt });
   const displayText = question.display ?? question.text;
-  $('sectionName').textContent = question.section || presets[presetIndex].name;
+  $('sectionName').textContent = question.section || planLabel();
+  $('sectionMeta').textContent = `${question.planPreset} · 第 ${question.planIndex + 1}/${activePlan.length} 部分`;
+  $('skipSection').textContent = question.planIndex + 1 === activePlan.length ? '结束并出结果' : '跳过本部分';
   $('sectionIntro').textContent = question.sectionIntro || '';
   $('sectionIntro').classList.toggle('hidden', !question.sectionIntro);
   $('question').textContent = displayText;
@@ -747,16 +892,21 @@ function scheduleNext(question, answer) {
     selectionEvent
   };
   if (advanceTimer) window.clearTimeout(advanceTimer);
-  advanceTimer = window.setTimeout(() => { void advanceAfterDelay(revision); }, 2000);
+  advanceTimer = window.setTimeout(() => { void advanceAfterDelay(revision); }, 900);
 }
 
 async function advanceAfterDelay(revision) {
   const pending = pendingAnswer;
   if (!pending || pending.revision !== revision) return;
   const selectionSaved = await pending.selectionEvent;
-  if (!selectionSaved || pendingAnswer?.revision !== revision) return;
+  if (pendingAnswer?.revision !== revision) return;
+  if (!selectionSaved) {
+    setQuizStatus('本题答案未能写入本机记录，已暂停。请检查存储后重试本题。');
+    return;
+  }
   const committed = await commitPendingAnswer();
   if (!committed || pendingAnswer) return;
+  setQuizStatus('');
   advanceTimer = null;
   questionIndex += 1;
   if (questionIndex < activeQuestions.length) renderQuestion();
@@ -788,17 +938,36 @@ async function commitPendingAnswer() {
   return true;
 }
 
-async function navigateTo(index) {
-  const total = activeQuestions.length;
-  if (index < 0 || index >= total) return;
+async function jumpTo(index) {
   if (advanceTimer) window.clearTimeout(advanceTimer);
   advanceTimer = null;
   if (pendingAnswer) {
     const saved = await pendingAnswer.selectionEvent;
     if (!saved || !(await commitPendingAnswer())) return;
   }
-  questionIndex = index;
+  if (index >= activeQuestions.length) {
+    await finish();
+    return;
+  }
+  questionIndex = Math.max(0, index);
   renderQuestion();
+}
+
+async function navigateTo(index) {
+  if (index < 0 || index >= activeQuestions.length) return;
+  await jumpTo(index);
+}
+
+/* 跳到下一个板块的第一题；没有下一个板块就直接出结果 */
+async function skipSection() {
+  const current = activeQuestions[questionIndex]?.planIndex;
+  let next = questionIndex;
+  while (next < activeQuestions.length && activeQuestions[next].planIndex === current) next += 1;
+  const remaining = next - questionIndex;
+  const step = activePlan[current];
+  if (!window.confirm(`跳过“${step?.section || '本部分'}”剩下的 ${remaining} 题？未作答的题会记为跳过。`)) return;
+  void writeEvent({ type: 'section_skipped', section: step?.section || '', fromIndex: questionIndex, skipped: remaining });
+  await jumpTo(next);
 }
 
 function stopSpeaking() {
@@ -835,8 +1004,11 @@ function speakQuestion(auto = false) {
   }
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'zh-CN';
-  utterance.rate = 0.9;
+  const voice = pickVoice();
+  if (voice) utterance.voice = voice;
+  utterance.lang = voice?.lang || 'zh-CN';
+  utterance.rate = 0.95;
+  utterance.pitch = 1;
   utterance.onend = stopSpeaking;
   utterance.onerror = stopSpeaking;
   isSpeaking = true;
@@ -863,6 +1035,7 @@ function goHome() {
   $('done').classList.add('hidden');
   $('setup').classList.remove('hidden');
   updateHomeButton();
+  renderScaleList();
 }
 
 function formatDuration(milliseconds) {
@@ -887,10 +1060,10 @@ function renderSectionResults() {
       result = `${group.answered} / ${group.total}`;
       rate = '人工评分';
     } else {
-      result = `${group.correct}/${group.answered} (${group.total})`;
-      rate = group.answered ? `${Math.round((group.correct / group.answered) * 100)}%` : '未作答';
+      result = group.answered ? `${group.correct}/${group.answered} (${group.total})` : `未作答 (${group.total})`;
+      rate = group.answered ? `${Math.round((group.correct / group.answered) * 100)}%` : '—';
     }
-    return `<tr><td>${escapeHtml(group.name)}</td><td class="result">${escapeHtml(result)}</td><td class="rate">${escapeHtml(rate)}</td><td class="skip">${skipped ? `跳过 ${skipped}` : ''}</td></tr>`;
+    return `<tr><td>${escapeHtml(group.name)}<small>${escapeHtml(group.source)}</small></td><td class="result">${escapeHtml(result)}</td><td class="rate">${escapeHtml(rate)}</td><td class="skip">${skipped ? `跳过 ${skipped}` : ''}</td></tr>`;
   });
   const scored = stats.filter((group) => group.scoring === 'auto');
   const totals = scored.reduce((sum, group) => ({
@@ -943,7 +1116,7 @@ async function finalizeSessionLog() {
     try {
       const manifest = await opfsLogDirectory.getFileHandle(`${sessionId}-manifest.json`, { create: true });
       const writable = await manifest.createWritable();
-      await writable.write(JSON.stringify({ sessionId, patient, age: patientAge || null, preset: presets[presetIndex].name, events }, null, 2));
+      await writable.write(JSON.stringify({ sessionId, patient, age: patientAge || null, preset: planLabel(), events }, null, 2));
       await writable.close();
     } catch (error) {
       console.warn('OPFS 最终清单写入失败。', error);
@@ -962,7 +1135,7 @@ async function finish() {
       id: sessionId,
       patient,
       age: patientAge || null,
-      preset: presets[presetIndex].name,
+      preset: planLabel(),
       startedAt: new Date(sessionStartedAt).toISOString(),
       completedAt,
       status: 'completed',
@@ -976,7 +1149,7 @@ async function finish() {
   $('quiz').classList.add('hidden');
   $('done').classList.remove('hidden');
   updateHomeButton();
-  $('summary').textContent = `患者 ${patient}${patientAge ? `（${patientAge} 岁）` : ''} 已完成“${presets[presetIndex].name}”${ageBand ? `（名人题：${ageBand === 'young' ? '18–30 岁版' : '31–60 岁版'}）` : ''}。`;
+  $('summary').textContent = `患者 ${patient}${patientAge ? `（${patientAge} 岁）` : ''} · ${new Date().toLocaleString('zh-CN')} · 共 ${activePlan.length} 个部分 / ${activeQuestions.length} 题${ageBand ? ` · 名人题${ageBand === 'young' ? '18–30 岁版' : '31–60 岁版'}` : ''}`;
   renderSectionResults();
   renderDashboard();
   $('logPath').textContent = directoryHandle
@@ -994,7 +1167,8 @@ async function download(extension, type) {
     age: patientAge || null,
     ageBand,
     epilepsy,
-    preset: presets[presetIndex].name,
+    preset: planLabel(),
+    plan: activePlan,
     startedAt: sessionStartedAt ? new Date(sessionStartedAt).toISOString() : null,
     completedAt: new Date().toISOString(),
     sections: stats,
@@ -1011,7 +1185,7 @@ async function download(extension, type) {
   const quote = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
   const answerRows = answers.map((answer) => {
     const [correct, score, expected] = describe(answer);
-    return [patient, patientAge, ageBand, presets[presetIndex].name, answer.questionIndex, answer.section, answer.question, answer.answer, expected, correct, score,
+    return [patient, patientAge, ageBand, planLabel(), answer.questionIndex, answer.section, answer.question, answer.answer, expected, correct, score,
       answer.time, answer.answerDurationMs, answer.confirmationDelayMs, answer.reactionTimeMs, answer.answerChanges, answer.audioPlayCount].map(quote).join(',');
   });
   const statRows = stats.map((group) => ['分区汇总', group.name, group.scoring, group.correct, group.answered, group.total, group.score].map(quote).join(','));
