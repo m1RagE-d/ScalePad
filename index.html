@@ -39,7 +39,20 @@
     .more summary { color: #486581; font-size: 16px; cursor: pointer; }
     .more > *:not(summary) { margin-top: 10px; }
     .more .muted { font-size: 13px; }
-    .skip-button { width: auto; margin: 0; padding: 12px 20px; border-radius: 12px; background: #f1f5f9; color: #486581; font-size: 17px; font-weight: 600; }
+    .skip-button { width: auto; margin: 0; padding: 12px 22px; border-radius: 12px; background: #e3eefb; color: #0b6bcb; font-size: 17px; font-weight: 700; }
+    .overlay { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 24px; background: #102a4399; }
+    .overlay-panel { display: flex; flex-direction: column; width: min(560px, 100%); max-height: 84%; padding: 22px; border-radius: 16px; background: #fff; }
+    .overlay-panel h3 { margin: 0 0 14px; font-size: 22px; }
+    .parts-list { flex: 1; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .part-item { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0; padding: 13px 15px; border: 2px solid #d9e2ec; border-radius: 12px; background: #fff; color: #102a43; font-size: 18px; font-weight: 600; text-align: left; }
+    .part-item.current { border-color: #0b6bcb; background: #eaf3ff; }
+    .part-item .code { display: flex; align-items: center; justify-content: center; flex: none; width: 34px; height: 34px; border-radius: 9px; background: #e3eaf2; color: #486581; font-size: 17px; }
+    .part-item.current .code { background: #0b6bcb; color: #fff; }
+    .part-item .name { flex: 1; min-width: 0; line-height: 1.25; }
+    .part-item .name small { display: block; color: #829ab1; font-size: 13px; font-weight: 400; }
+    .part-item .state { flex: none; color: #627d98; font-size: 14px; font-weight: 400; }
+    .overlay-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+    .overlay-actions button { margin: 0; }
     #editor { overflow-y: auto; padding: 28px 5vw 40px; }
     .editor-top { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
     .editor-top h2 { margin: 0; font-size: clamp(28px, 4vw, 42px); }
@@ -155,16 +168,19 @@
         <span>癫痫病史</span>
         <button class="small" id="epilepsyNo" type="button">无</button>
         <button class="small" id="epilepsyYes" type="button">有</button>
+      </div>
+      <div class="confirm-row">
+        <span>名人题</span>
+        <button class="small" id="bandYoung" type="button">18–30 岁版</button>
+        <button class="small" id="bandOlder" type="button">31–60 岁版</button>
         <em id="ageBandNote"></em>
       </div>
-      <label>选择量表（按点击顺序作答，答题中可跳过板块）</label>
+      <label>选择量表（按点击顺序作答，答题中可随时切换部分）</label>
       <div id="scaleList" class="scale-list"></div>
       <button id="start">开始</button>
       <details class="more">
         <summary>更多设置</summary>
-        <div class="save-setting"><div><strong>自动朗读题目</strong><span id="voiceHint">关闭后仍可在答题界面手动播放或停止</span></div><button class="small" id="voiceToggle">开启</button></div>
-        <label for="voiceSelect">朗读语音</label>
-        <select id="voiceSelect"></select>
+        <div class="save-setting"><div><strong>自动朗读题目</strong><span>用系统中文语音；关闭后仍可在答题界面手动播放或停止</span></div><button class="small" id="voiceToggle">开启</button></div>
         <div class="save-setting"><div><strong>答题记录保存位置</strong><span id="saveStatus">启动测试前会检查本机持久化存储；可另选自定义文件夹</span></div><button class="small" id="chooseSaveFolder">选择文件夹</button></div>
         <button class="small" id="openEditor">问卷编辑</button>
         <p class="muted" id="buildTag"></p>
@@ -174,7 +190,7 @@
     <section id="quiz" class="card hidden">
       <div class="quiz-nav">
         <button class="icon-button" id="prevQuestion" type="button" aria-label="上一题" title="上一题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button>
-        <button class="skip-button" id="skipSection" type="button">跳过本部分</button>
+        <button class="skip-button" id="partsButton" type="button">部分</button>
         <button class="icon-button" id="nextQuestion" type="button" aria-label="下一题" title="下一题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
       </div>
       <div class="section-band"><div class="section-band-top"><strong id="sectionName"></strong><em id="sectionMeta"></em></div><span id="sectionIntro"></span></div>
@@ -184,6 +200,13 @@
       <p class="researcher-script hidden" id="researcherScript"></p>
       <p class="quiz-status hidden" id="quizStatus" aria-live="polite"></p>
     </section>
+    <div id="partsOverlay" class="overlay hidden">
+      <div class="overlay-panel">
+        <h3>切换到哪一部分</h3>
+        <div id="partsList" class="parts-list"></div>
+        <div class="overlay-actions"><button class="small" id="partsClose" type="button">取消</button><button class="small" id="finishNow" type="button">结束并出结果</button></div>
+      </div>
+    </div>
     <section id="done" class="card hidden">
       <h2>答题完成</h2>
       <p id="summary"></p>
