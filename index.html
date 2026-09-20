@@ -20,7 +20,8 @@
     header .home-button { position: absolute; top: 50%; left: 20px; display: flex; align-items: center; justify-content: center; width: 58px; height: 58px; margin: 0; padding: 0; transform: translateY(-50%); border-radius: 12px; background: #fff; color: #0b6bcb; }
     main { width: 100%; height: calc(100% - 92px); padding: 0; }
     .card { width: 100%; height: 100%; padding: 24px 4vw 18px; background: #fff; }
-    #setup, #done { max-width: 760px; height: auto; margin: 30px auto; border-radius: 16px; box-shadow: 0 4px 18px #1232; }
+    #setup, #done { max-width: 900px; height: auto; margin: 30px auto; border-radius: 16px; box-shadow: 0 4px 18px #1232; }
+    #done { max-height: calc(100% - 60px); overflow-y: auto; }
     #editor { overflow-y: auto; padding: 28px 5vw 40px; }
     .editor-top { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
     .editor-top h2 { margin: 0; font-size: clamp(28px, 4vw, 42px); }
@@ -67,6 +68,9 @@
     #choices .free-response-input { flex: none; height: 150px; margin: 0; resize: none; font-size: clamp(28px, 4vw, 48px); }
     #choices.free-response button { flex: none; height: auto; min-height: 92px; }
     .muted { margin: 10px 0 0; color: #627d98; text-align: center; font-size: clamp(16px, 2vw, 24px); }
+    .storage-status { min-height: 24px; margin: 8px 0 0; color: #627d98; text-align: center; font-size: 16px; }
+    .storage-status.error { color: #b42318; font-weight: 700; }
+    .storage-status.ok { color: #087443; }
     .save-setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 18px 0; padding: 14px 16px; border: 1px solid #d9e2ec; border-radius: 12px; background: #f8fafc; }
     .save-setting strong { display: block; font-size: 19px; }
     .save-setting span { display: block; margin-top: 4px; color: #627d98; font-size: 15px; }
@@ -80,8 +84,7 @@
     #editor .option-row button { width: auto; margin: 6px 0 10px; padding: 10px 14px; font-size: 17px; }
     #editor .editor-actions button { flex: 1; width: auto; margin: 0; font-size: 22px; }
     @media (max-width: 700px) { #choices { gap: 12px; } #quiz { padding-left: 16px; padding-right: 16px; } }
-    .quiz-nav { display: flex; align-items: center; gap: 12px; flex: none; height: 72px; }
-    .quiz-nav select { flex: 1; width: auto; height: 56px; margin: 0; padding: 8px 14px; text-align: center; font-size: clamp(18px, 2.5vw, 28px); }
+    .quiz-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; height: 72px; }
     button.icon-button { display: flex; align-items: center; justify-content: center; flex: none; width: 64px; height: 56px; margin: 0; padding: 0; border-radius: 12px; background: #e3eefb; color: #102a43; font-size: 44px; line-height: 1; }
     button.icon-button svg { display: block; width: 34px; height: 34px; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
     header .home-button svg { width: 32px; height: 32px; stroke-width: 2.2; }
@@ -95,6 +98,14 @@
     #questionMedia { flex: 0 1 48%; min-height: 0; max-height: 48%; }
     #questionMedia:empty { display: none; }
     #questionMedia img { width: auto; height: auto; max-width: min(88vw, 1000px); max-height: min(48vh, 680px); }
+    .dashboard { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+    .metric { padding: 16px; border: 1px solid #d9e2ec; border-radius: 12px; background: #f8fafc; }
+    .metric strong { display: block; color: #627d98; font-size: 16px; font-weight: 600; }
+    .metric span { display: block; margin-top: 4px; color: #102a43; font-size: clamp(24px, 3vw, 34px); font-weight: 700; }
+    .log-path { margin: 16px 0; padding: 14px 16px; border-radius: 10px; background: #edf7f1; color: #087443; font-size: 16px; line-height: 1.45; overflow-wrap: anywhere; }
+    .dashboard-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .dashboard-actions button { margin: 0; }
+    @media (max-width: 700px) { .dashboard { grid-template-columns: 1fr 1fr; } .dashboard-actions { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -104,17 +115,19 @@
       <h2>开始答题</h2>
       <label for="patient">患者编号</label>
       <input id="patient" placeholder="例如 P001" autocomplete="off">
+      <label for="patientAge">年龄</label>
+      <input id="patientAge" type="number" min="0" max="120" step="1" placeholder="例如 72" inputmode="numeric" autocomplete="off">
       <label for="preset">选择预设</label>
       <select id="preset"></select>
       <button class="small" id="start">开始</button>
       <button class="small" id="openEditor">问卷编辑</button>
-      <div class="save-setting"><div><strong>答题记录保存位置</strong><span id="saveStatus">尚未选择文件夹；导出时可用系统文件面板选择位置</span></div><button class="small" id="chooseSaveFolder">选择文件夹</button></div>
-      <p class="muted">答题记录会在本机保留；完成后可导出到所选位置。</p>
+      <div class="save-setting"><div><strong>答题记录保存位置</strong><span id="saveStatus">启动测试前会检查本机持久化存储；可另选自定义文件夹</span></div><button class="small" id="chooseSaveFolder">选择文件夹</button></div>
+      <p class="storage-status" id="storageStatus" aria-live="polite"></p>
+      <p class="muted">每答完一题立即写入本机记录。完成后可导出到“下载”或自定义位置。</p>
     </section>
     <section id="quiz" class="card hidden">
       <div class="quiz-nav">
         <button class="icon-button" id="prevQuestion" type="button" aria-label="上一题" title="上一题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button>
-        <select id="questionJump" aria-label="跳转题目"></select>
         <button class="icon-button" id="nextQuestion" type="button" aria-label="下一题" title="下一题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
       </div>
       <div class="question-wrap" id="questionWrap"><div class="q" id="question"></div><button class="icon-button audio-button" id="speakQuestion" type="button" aria-label="播放题目" title="播放题目">🔊</button></div>
@@ -124,9 +137,9 @@
     <section id="done" class="card hidden">
       <h2>答题完成</h2>
       <p id="summary"></p>
-      <button class="small" id="csv">导出 CSV</button>
-      <button class="small" id="json">导出 JSON</button>
-      <button class="small" id="again">开始下一位患者</button>
+      <div id="dashboard" class="dashboard"></div>
+      <div id="logPath" class="log-path"></div>
+      <div class="dashboard-actions"><button class="small" id="csv">导出 CSV（下载）</button><button class="small" id="json">导出 JSON（下载）</button><button class="small" id="again">开始下一位患者</button></div>
     </section>
     <section id="editor" class="card hidden">
       <div class="editor-top"><h2>问卷编辑</h2><button class="small" id="backToSetup">返回答题</button></div>

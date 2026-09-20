@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bip-evaluation-v6';
+const CACHE_NAME = 'bip-evaluation-v7';
 const CORE_FILES = ['./', './index.html', './app.js', './presets.js', './manifest.json'];
 const numbered = (folder, prefix, count) => Array.from({ length: count }, (_, index) => `./${folder}/${prefix}${String(index + 1).padStart(2, '0')}.png`);
 const MATERIAL_FILES = [

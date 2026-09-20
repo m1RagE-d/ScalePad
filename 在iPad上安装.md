@@ -59,6 +59,8 @@ Mac 用户运行 `./start-scalepad-mac.sh` 后，直接使用脚本显示的证�
 
 ## 日常使用
 
-以后直接从 iPad 主屏幕打开“BIP评估”即可，不需要电脑开机，也不需要局域网。答题记录会保存在 iPad 本地；完成问卷后可用“导出 CSV”或“导出 JSON”保存到“文件”App。
+以后直接从 iPad 主屏幕打开“BIP评估”即可，不需要电脑开机，也不需要局域网。开始测试前，系统会先检查本机持久化存储；每次选择会立即写入 IndexedDB，支持 OPFS 的浏览器还会同时写入 ScalePad 专用离线目录。记录包含年龄、每题反应时间、答题耗时、修改次数和题干播放次数。
+
+在 iPad Safari 中，网页不能在没有用户确认的情况下直接指定“文件”App 的下载目录。因此完成测试后请点击“导出 JSON”或“导出 CSV”，在系统文件面板中选择“下载”或其他自定义位置；导出文件中包含完整事件日志。若浏览器支持文件夹权限，也可以在开始答题前选择并验证自定义文件夹，系统会逐题写入该文件夹。
 
 如果电脑更换了局域网 IP，请重新运行启动脚本，并用新的地址访问；若 Safari 报证书名称不匹配，删除项目中的 `certs/scalepad.crt` 以及对应系统的私钥文件后重新生成，并在 iPad 重新信任证书。Windows 私钥位于 `C:\Users\<用户名>\AppData\Local\ScalePad\scalepad.key`，Mac 私钥位于 `~/Library/Application Support/ScalePad/scalepad.key`。
