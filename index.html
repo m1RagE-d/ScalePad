@@ -62,6 +62,7 @@
     #choices button { height: 100%; min-height: 0; margin: 0; border-radius: 18px; font-size: clamp(44px, 7vw, 82px); }
     #choices.many { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
     #choices.many button { font-size: clamp(28px, 4vw, 48px); }
+    #choices.long-options button { font-size: clamp(18px, 2.4vw, 32px); line-height: 1.25; padding: 10px; }
     #choices.many[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     #choices.many[data-count="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     #choices.free-response { flex-direction: column; justify-content: center; align-items: stretch; gap: 14px; }
@@ -98,6 +99,18 @@
     #questionMedia { flex: 0 1 48%; min-height: 0; max-height: 48%; }
     #questionMedia:empty { display: none; }
     #questionMedia img { width: auto; height: auto; max-width: min(88vw, 1000px); max-height: min(48vh, 680px); }
+    .section-band { flex: none; padding: 10px 14px; margin-bottom: 6px; border-radius: 12px; background: #eaf3ff; border: 1px solid #c9ddf7; }
+    .section-band strong { display: block; color: #0b6bcb; font-size: clamp(18px, 2.2vw, 26px); }
+    .section-band span { display: block; margin-top: 3px; color: #334e68; font-size: clamp(15px, 1.8vw, 21px); line-height: 1.35; }
+    .researcher-script { flex: none; margin: 8px 0 0; color: #829ab1; text-align: center; font-size: 15px; }
+    .q.medium { font-size: clamp(30px, 4.6vw, 58px); }
+    .q.small { font-size: clamp(22px, 3.2vw, 40px); line-height: 1.35; }
+    .section-table { width: 100%; margin: 12px 0 20px; border-collapse: collapse; font-size: 17px; }
+    .section-table th, .section-table td { padding: 9px 10px; border-bottom: 1px solid #e3eaf2; text-align: left; }
+    .section-table th { color: #627d98; font-size: 15px; font-weight: 600; }
+    .section-table td.result { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .section-table td.rate, .section-table td.skip { color: #627d98; white-space: nowrap; }
+    .section-table tr.total td { border-top: 2px solid #bcccdc; border-bottom: 0; background: #f4f7fb; font-weight: 700; }
     .dashboard { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
     .metric { padding: 16px; border: 1px solid #d9e2ec; border-radius: 12px; background: #f8fafc; }
     .metric strong { display: block; color: #627d98; font-size: 16px; font-weight: 600; }
@@ -117,8 +130,21 @@
       <input id="patient" placeholder="例如 P001" autocomplete="off">
       <label for="patientAge">年龄</label>
       <input id="patientAge" type="number" min="0" max="120" step="1" placeholder="例如 72" inputmode="numeric" autocomplete="off">
+      <label for="ageBand">名人题版本</label>
+      <select id="ageBand">
+        <option value="">自动（按年龄：30 岁以下用 18–30 岁版）</option>
+        <option value="young">手动：18–30 岁版</option>
+        <option value="older">手动：31–60 岁版</option>
+      </select>
+      <label for="epilepsy">癫痫病史确认（必填）</label>
+      <select id="epilepsy">
+        <option value="">请选择</option>
+        <option value="no">无癫痫病史</option>
+        <option value="yes">有癫痫病史</option>
+      </select>
       <label for="preset">选择预设</label>
       <select id="preset"></select>
+      <div class="save-setting"><div><strong>语音朗读</strong><span>关闭后不会自动朗读题目；答题界面的按钮仍可随时手动播放或停止</span></div><button class="small" id="voiceToggle">开启</button></div>
       <button class="small" id="start">开始</button>
       <button class="small" id="openEditor">问卷编辑</button>
       <div class="save-setting"><div><strong>答题记录保存位置</strong><span id="saveStatus">启动测试前会检查本机持久化存储；可另选自定义文件夹</span></div><button class="small" id="chooseSaveFolder">选择文件夹</button></div>
@@ -130,13 +156,16 @@
         <button class="icon-button" id="prevQuestion" type="button" aria-label="上一题" title="上一题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button>
         <button class="icon-button" id="nextQuestion" type="button" aria-label="下一题" title="下一题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
       </div>
-      <div class="question-wrap" id="questionWrap"><div class="q" id="question"></div><button class="icon-button audio-button" id="speakQuestion" type="button" aria-label="播放题目" title="播放题目">🔊</button></div>
+      <div class="section-band"><strong id="sectionName"></strong><span id="sectionIntro"></span></div>
+      <div class="question-wrap" id="questionWrap"><div class="q" id="question"></div><button class="icon-button audio-button" id="speakQuestion" type="button" aria-label="朗读题目" title="朗读题目">🔊</button></div>
       <div id="questionMedia"></div>
       <div id="choices"></div>
+      <p class="researcher-script hidden" id="researcherScript"></p>
     </section>
     <section id="done" class="card hidden">
       <h2>答题完成</h2>
       <p id="summary"></p>
+      <div id="sectionResults"></div>
       <div id="dashboard" class="dashboard"></div>
       <div id="logPath" class="log-path"></div>
       <div class="dashboard-actions"><button class="small" id="csv">导出 CSV（下载）</button><button class="small" id="json">导出 JSON（下载）</button><button class="small" id="again">开始下一位患者</button></div>
